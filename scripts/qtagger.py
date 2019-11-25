@@ -4,9 +4,15 @@ import time
 import click
 import dtoolcore
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QDir
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QSizePolicy
+from PyQt5.QtWidgets import (
+    QAction,
+    QFileDialog,
+    QMessageBox,
+    QApplication, QLabel, QMainWindow, QSizePolicy,
+    QMenu
+)
 
 
 KEYMAP = {
@@ -71,6 +77,8 @@ class QTagger(QMainWindow):
     def __init__(self, uri):
         super(QTagger, self).__init__()
 
+        self.outputFileName = "results.csv"
+
         self.tis = TaggableImageSet(uri)
         # self.idns = list(ds.identifiers)
         # self.tags = {idn: 0 for idn in self.idns}
@@ -86,6 +94,9 @@ class QTagger(QMainWindow):
 
         self.statusbar = self.statusBar()
         self.update_statusbar()
+
+        self.createActions()
+        self.createMenus()
 
         self.resize(600, 800)
 
@@ -118,9 +129,56 @@ class QTagger(QMainWindow):
         # current_tag = self.tags[self.idns[self.image_index]]
         # tag_label = TAGMAP[current_tag]
         tag_label = f"{TAGMAP[self.tis.tags[self.image_index]]}"
-        message = f"{pos_label} - ({tag_label})"
+
+        if self.image_index > 0:
+            prev_tag_label = f"{TAGMAP[self.tis.tags[self.image_index-1]]}"
+        else:
+            prev_tag_label = "None"
+
+        message = f"{pos_label} - ({tag_label}) - previous image ({prev_tag_label})"
         
         self.statusbar.showMessage(message)
+
+    def createActions(self):
+        self.saveAct = QAction("&Save", self, shortcut="Ctrl+S", triggered=self.save)
+        self.saveAsAct = QAction("Save &as", self, triggered=self.saveAs)
+        self.helpAct = QAction("&Help", self, triggered=self.showhelp)
+
+    def createMenus(self):
+        self.fileMenu = QMenu("&File", self)
+        self.fileMenu.addAction(self.saveAct)
+        self.fileMenu.addAction(self.saveAsAct)
+        self.menuBar().addMenu(self.fileMenu)
+
+        self.helpMenu = QMenu("&Help", self)
+        self.helpMenu.addAction(self.helpAct)
+        self.menuBar().addMenu(self.helpMenu)
+
+    def showhelp(self):
+
+        tagMessage = "<p>Tag commands:</p>"
+        "<ul>"
+        for k, v in TAGMAP.items():
+            tagMessage += f"<li>{k}: {v}</li>"
+        tagMessage += "</ul>"
+
+        QMessageBox.about(
+            self,
+            "Keyboard commands",
+            tagMessage
+        )
+
+    def save(self):
+        self.tis.save_to_file(self.outputFileName)
+
+    def saveAs(self):
+        fileName, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Results",
+            QDir.currentPath()
+        )
+        self.outputFileName = fileName
+        self.save()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
