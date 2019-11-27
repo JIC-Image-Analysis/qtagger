@@ -8,11 +8,17 @@ from PyQt5.QtCore import Qt, QDir
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
+    QDialog,
     QFileDialog,
+    QInputDialog,
     QMessageBox,
+    QPushButton,
+    QVBoxLayout,
     QApplication, QLabel, QMainWindow, QSizePolicy,
     QMenu
 )
+
+from ruamel.yaml import YAML
 
 
 KEYMAP = {
@@ -44,14 +50,16 @@ class TaggableImageSet(object):
     def save_to_file(self, fpath):
 
         with open(fpath, "w") as fh:
-            fh.write("ImageNumber,TagID,TagLabel,Time\n")
+            fh.write("ImageNumber,FileName,TagID,TagLabel,Time\n")
             for n in range(len(self)):
                 try:
                     tag_time = self.tag_times[n] - self.load_times[n]
                 except KeyError:
                     tag_time = -1
 
-                fh.write(f"{n},{self.tags[n]},{TAGMAP[self.tags[n]]},{tag_time}\n")
+                idn = list(self.dataset.identifiers)[n]
+                fname = self.dataset.item_properties(idn)['relpath']
+                fh.write(f"{n},{fname},{self.tags[n]},{TAGMAP[self.tags[n]]},{tag_time}\n")
 
     def __len__(self):
         return len(self.dataset.identifiers)
@@ -72,12 +80,28 @@ class TaggableImageSet(object):
         return image_fpath
 
 
+class DataSetLoader(QDialog):
+
+    def __init__(self):
+        super(DataSetLoader, self).__init__()
+
+        self.button = QPushButton("Load dataset")
+        layout = QVBoxLayout()
+        layout.addWidget(self.button)
+
+        self.setLayout(layout)
+
+
 class QTagger(QMainWindow):
 
     def __init__(self, uri):
         super(QTagger, self).__init__()
 
         self.outputFileName = "results.csv"
+
+        yaml = YAML()
+        with open("data.yml") as fh:
+            result = yaml.load(fh)
 
         self.tis = TaggableImageSet(uri)
         # self.idns = list(ds.identifiers)
@@ -140,12 +164,14 @@ class QTagger(QMainWindow):
         self.statusbar.showMessage(message)
 
     def createActions(self):
+        self.openAct = QAction("&Open", self, shortcut="Ctrl+O", triggered=self.openURI)
         self.saveAct = QAction("&Save", self, shortcut="Ctrl+S", triggered=self.save)
         self.saveAsAct = QAction("Save &as", self, triggered=self.saveAs)
         self.helpAct = QAction("&Help", self, triggered=self.showhelp)
 
     def createMenus(self):
         self.fileMenu = QMenu("&File", self)
+        self.fileMenu.addAction(self.openAct)
         self.fileMenu.addAction(self.saveAct)
         self.fileMenu.addAction(self.saveAsAct)
         self.menuBar().addMenu(self.fileMenu)
@@ -167,6 +193,13 @@ class QTagger(QMainWindow):
             "Keyboard commands",
             tagMessage
         )
+
+    def openURI(self):
+        uri_list = [
+            "file:/Users/hartleym/scratch/megan_scaled_100_example_images/",
+            "http://bit.ly/2O7BSMh"
+        ]
+        QInputDialog.getItem(self, "Select URI", "Available datasets", uri_list, 0, False)
 
     def save(self):
         self.tis.save_to_file(self.outputFileName)
@@ -204,14 +237,9 @@ class QTagger(QMainWindow):
 @click.argument('dataset_uri')
 def main(dataset_uri):
 
-    # ds = dtoolcore.DataSet.from_uri(dataset_uri)
-
     app = QApplication([])
-
     qtagger = QTagger(dataset_uri)
     qtagger.show()
-
-
     app.exec_()
 
 
