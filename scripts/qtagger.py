@@ -1,13 +1,14 @@
 import sys
 import time
+import getpass
 
-import click
 import dtoolcore
 
 from PyQt5.QtCore import Qt, QDir
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
+    QComboBox,
     QDialog,
     QFileDialog,
     QInputDialog,
@@ -80,33 +81,52 @@ class TaggableImageSet(object):
         return image_fpath
 
 
+def get_available_datasets(fpath="data.yml"):
+    yaml = YAML()
+
+    with open("data.yml") as fh:
+        result = yaml.load(fh)
+
+    return result
+
+
 class DataSetLoader(QDialog):
 
     def __init__(self):
         super(DataSetLoader, self).__init__()
 
         self.button = QPushButton("Load dataset")
+        self.button.clicked.connect(self.finish)
+
+        self.combobox = QComboBox(self)
+        available_datasets = get_available_datasets()
+        self.available_datasets = available_datasets
+        self.combobox.addItems(available_datasets)
+
         layout = QVBoxLayout()
+        layout.addWidget(self.combobox)
         layout.addWidget(self.button)
 
         self.setLayout(layout)
 
+        self.show()
+
+    def finish(self):
+        self.accept()
+
+    def getDataSet(self):
+        ds_name = self.combobox.currentText()
+        ds_uri = self.available_datasets[ds_name]
+
+        return ds_name, ds_uri
+
 
 class QTagger(QMainWindow):
 
-    def __init__(self, uri):
+    def __init__(self, uri=None):
         super(QTagger, self).__init__()
 
-        self.outputFileName = "results.csv"
-
-        yaml = YAML()
-        with open("data.yml") as fh:
-            result = yaml.load(fh)
-
-        self.tis = TaggableImageSet(uri)
-        # self.idns = list(ds.identifiers)
-        # self.tags = {idn: 0 for idn in self.idns}
-        self.image_index = 0
+        # self.outputFileName = "results.csv"
 
         self.imageLabel = QLabel()
         self.imageLabel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -114,19 +134,28 @@ class QTagger(QMainWindow):
 
         self.setCentralWidget(self.imageLabel)
 
-        self.set_image(self.image_index)
-
         self.statusbar = self.statusBar()
-        self.update_statusbar()
 
         self.createActions()
         self.createMenus()
 
+        if uri:
+            self.load_dataset(uri)
+        else:
+            self.tis = None
+
         self.resize(600, 800)
 
+    def load_dataset(self, uri):
+        self.tis = TaggableImageSet(uri)
+        self.image_index = 0
+        self.set_image(self.image_index)
+        self.update_statusbar()
+
+        username = getpass.getuser()
+        self.outputFileName = f"{username}-{self.tis.dataset.uuid}.csv"
+
     def set_image(self, idx):
-        # idn = self.idns[idx]
-        # image_fpath = self.ds.item_content_abspath(idn)
         image_fpath = self.tis[idx]
         image = QImage(image_fpath)
         self.imageLabel.setPixmap(QPixmap.fromImage(image))
@@ -195,11 +224,15 @@ class QTagger(QMainWindow):
         )
 
     def openURI(self):
-        uri_list = [
-            "file:/Users/hartleym/scratch/megan_scaled_100_example_images/",
-            "http://bit.ly/2O7BSMh"
-        ]
-        QInputDialog.getItem(self, "Select URI", "Available datasets", uri_list, 0, False)
+
+        ds = DataSetLoader()
+        if ds.exec_():
+            ds_name, ds_uri = ds.getDataSet()
+        else:
+            ds_name, ds_uri = None, None
+
+        if ds_uri:
+            self.load_dataset(ds_uri)
 
     def save(self):
         self.tis.save_to_file(self.outputFileName)
@@ -217,32 +250,33 @@ class QTagger(QMainWindow):
         if event.key() == Qt.Key_Escape:
             sys.exit(0)
 
-        if event.key() == Qt.Key_Left:
-            self.prev_image()
+        if self.tis is not None:
+            if event.key() == Qt.Key_Left:
+                self.prev_image()
 
-        if event.key() == Qt.Key_Right:
-            self.next_image()
+            if event.key() == Qt.Key_Right:
+                self.next_image()
 
-        if event.key() == Qt.Key_S:
-            self.tis.save_to_file("results.csv")
+            if event.key() == Qt.Key_S:
+                self.save()
 
-        if event.key() in KEYMAP:
-            tag_id = KEYMAP[event.key()]
-            self.tis.tag_item(self.image_index, tag_id)
-            # self.tags[self.idns[self.image_index]] = tag_id
-            self.next_image()
+            if event.key() in KEYMAP:
+                tag_id = KEYMAP[event.key()]
+                self.tis.tag_item(self.image_index, tag_id)
+                self.next_image()
 
 
-@click.command()
-@click.argument('dataset_uri')
-def main(dataset_uri):
+def main():
+
+    if len(sys.argv) > 1:
+        ds_uri = sys.argv[1]
+    else:
+        ds_uri = None
 
     app = QApplication([])
-    qtagger = QTagger(dataset_uri)
+    qtagger = QTagger(ds_uri)
     qtagger.show()
     app.exec_()
-
-
 
 if __name__ == "__main__":
     main()
