@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import getpass
@@ -234,6 +235,11 @@ class QTagger(QMainWindow):
         if ds_uri:
             self.load_dataset(ds_uri)
 
+    def autosave(self):
+        base, _ = os.path.splitext(self.outputFileName)
+        autosaveFileName = base + '.autosave.csv'
+        self.tis.save_to_file(autosaveFileName)
+
     def save(self):
         self.tis.save_to_file(self.outputFileName)
 
@@ -246,6 +252,9 @@ class QTagger(QMainWindow):
         self.outputFileName = fileName
         self.save()
 
+    def load(self):
+        pass
+    
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             sys.exit(0)
@@ -260,9 +269,13 @@ class QTagger(QMainWindow):
             if event.key() == Qt.Key_S:
                 self.save()
 
+            if event.key() == Qt.Key_L:
+                self.load()
+
             if event.key() in KEYMAP:
                 tag_id = KEYMAP[event.key()]
                 self.tis.tag_item(self.image_index, tag_id)
+                self.autosave()
                 self.next_image()
 
 
